@@ -1,14 +1,3 @@
-# 🔧 YAML CORREGIT - GitHub Actions
-
-## ⚠️ PROBLEMA: Error a la línia 7
-
-El problema és probablement amb la indentació o els secrets.
-
----
-
-## ✅ YAML CORREGIT (Copia aquest)
-
-```yaml
 name: Build and Push Docker Images
 
 on:
@@ -16,11 +5,11 @@ on:
     branches:
       - main
       - master
-  workflow_dispatch:
+  workflow_dispatch:  # ✅ Execució manual
 
 jobs:
   build-backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # ✅ Ubuntu 22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -45,7 +34,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # ✅ Ubuntu 22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -70,8 +59,8 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-worker:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    runs-on: ubuntu-latest  # ✅ Ubuntu 22.04
+    timeout-minutes: 60     # ✅ Timeout seguretat
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -94,55 +83,3 @@ jobs:
           tags: urkovitx/mobil_scan-worker:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-```
-
----
-
-## 🔍 CANVIS FETS
-
-1. ✅ Canviat `branches: [ main, master ]` per format llista correcte
-2. ✅ Eliminat `build-args` que podia causar problemes
-3. ✅ Verificada indentació correcta
-
----
-
-## 📝 COM ACTUALITZAR-LO
-
-### Opció A: Editar el fitxer existent
-1. Anar a: https://github.com/urkovitx/mobil_scan/blob/main/.github/workflows/blank.yml
-2. Click icona del llapis (Edit)
-3. ESBORRAR TOT
-4. ENGANXAR el YAML de dalt ☝️
-5. Commit changes
-
-### Opció B: Esborrar i crear de nou
-1. Esborrar `.github/workflows/blank.yml`
-2. Crear nou: `.github/workflows/docker-build.yml`
-3. Enganxar el YAML de dalt ☝️
-4. Commit
-
----
-
-## ⚠️ IMPORTANT
-
-Assegura't que:
-- ✅ No hi ha espais extra al principi
-- ✅ La indentació és amb espais (no tabs)
-- ✅ Els secrets estan configurats correctament
-
----
-
-## 🧪 VERIFICAR SECRETS
-
-Anar a: https://github.com/urkovitx/mobil_scan/settings/secrets/actions
-
-Hauries de veure:
-- ✅ DOCKER_USERNAME
-- ✅ DOCKER_PASSWORD
-
----
-
-**📋 Copia el YAML corregit de dalt i substitueix el fitxer a GitHub!**
-
-
-
