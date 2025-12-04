@@ -1,15 +1,21 @@
-# 📋 COPIA AQUEST YAML PER GITHUB ACTIONS
+# 🔧 YAML CORREGIT - GitHub Actions
 
-## 🎯 FITXER: `.github/workflows/docker-build.yml`
+## ⚠️ PROBLEMA: Error a la línia 7
 
-Copia tot el contingut de sota i enganxa'l a GitHub:
+El problema és probablement amb la indentació o els secrets.
+
+---
+
+## ✅ YAML CORREGIT (Copia aquest)
 
 ```yaml
 name: Build and Push Docker Images
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 jobs:
@@ -88,67 +94,55 @@ jobs:
           tags: urkovitx/mobil_scan-worker:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
 ```
 
 ---
 
-## 📝 PASSOS PER PUJAR-LO
+## 🔍 CANVIS FETS
 
-### 1️⃣ Anar al teu repo GitHub
-```
-https://github.com/urkovitx/mobil_scan
-```
-
-### 2️⃣ Crear el fitxer
-- Click "Add file" → "Create new file"
-- Nom del fitxer: `.github/workflows/docker-build.yml`
-- Enganxar el YAML de dalt ☝️
-
-### 3️⃣ Commit
-- Commit message: "Add GitHub Actions workflow"
-- Click "Commit new file"
-
-### 4️⃣ Executar
-- Anar a: https://github.com/urkovitx/mobil_scan/actions
-- Click "Build and Push Docker Images"
-- Click "Run workflow" → "Run workflow"
-
-### 5️⃣ Monitoritzar
-- Veure el build en temps real
-- Esperar 15-20 minuts
-- Verificar a Docker Hub
+1. ✅ Canviat `branches: [ main, master ]` per format llista correcte
+2. ✅ Eliminat `build-args` que podia causar problemes
+3. ✅ Verificada indentació correcta
 
 ---
 
-## ✅ SECRETS NECESSARIS (Ja configurats)
+## 📝 COM ACTUALITZAR-LO
 
-- ✅ DOCKER_USERNAME: urkovitx
-- ✅ DOCKER_PASSWORD: [token]
+### Opció A: Editar el fitxer existent
+1. Anar a: https://github.com/urkovitx/mobil_scan/blob/main/.github/workflows/blank.yml
+2. Click icona del llapis (Edit)
+3. ESBORRAR TOT
+4. ENGANXAR el YAML de dalt ☝️
+5. Commit changes
 
----
-
-## 🎯 RESULTAT ESPERAT
-
-Després de 15-20 minuts tindràs:
-- ✅ urkovitx/mobil_scan-backend:latest
-- ✅ urkovitx/mobil_scan-frontend:latest
-- ✅ urkovitx/mobil_scan-worker:latest
-
----
-
-## 🚀 DESPRÉS POTS EXECUTAR LOCALMENT
-
-```powershell
-docker pull urkovitx/mobil_scan-backend:latest
-docker pull urkovitx/mobil_scan-frontend:latest
-docker pull urkovitx/mobil_scan-worker:latest
-
-.\run_all_local.bat
-```
+### Opció B: Esborrar i crear de nou
+1. Esborrar `.github/workflows/blank.yml`
+2. Crear nou: `.github/workflows/docker-build.yml`
+3. Enganxar el YAML de dalt ☝️
+4. Commit
 
 ---
 
-**📋 Copia el YAML de dalt i enganxa'l a GitHub!**
+## ⚠️ IMPORTANT
+
+Assegura't que:
+- ✅ No hi ha espais extra al principi
+- ✅ La indentació és amb espais (no tabs)
+- ✅ Els secrets estan configurats correctament
+
+---
+
+## 🧪 VERIFICAR SECRETS
+
+Anar a: https://github.com/urkovitx/mobil_scan/settings/secrets/actions
+
+Hauries de veure:
+- ✅ DOCKER_USERNAME
+- ✅ DOCKER_PASSWORD
+
+---
+
+**📋 Copia el YAML corregit de dalt i substitueix el fitxer a GitHub!**
+
+
 
