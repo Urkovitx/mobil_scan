@@ -1,22 +1,32 @@
 
-# Use full Python image instead of slim to avoid apt-get issues
-# This image already has most system dependencies pre-installed
-FROM python:3.9
+
+FROM python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-# Copy requirements from parent directory
-COPY requirements-worker.txt .
+# Install lightweight system deps required by opencv and ffmpeg
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends \
+	   ca-certificates \
+	   ffmpeg \
+	   libgl1 \
+	   libglib2.0-0 \
+	&& rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies with increased timeout
-RUN pip install --no-cache-dir --timeout=1000 -r requirements-worker.txt
+# Copy requirements and use longer pip timeout and no-cache
+COPY requirements-worker.txt ./
+RUN pip install --no-cache-dir --default-timeout=1000 -r requirements-worker.txt
 
 # Copy application code
-COPY ./worker/processor.py .
-COPY ./shared/database.py .
+COPY ./worker/processor.py ./
+COPY ./shared/database.py ./
 
 # Create necessary directories
 RUN mkdir -p /app/videos /app/frames /app/results
 
-# Run the worker
+# Set a non-root user (optional safety) - keep using root if volumes require it
+# USER appuser
+
 CMD ["python", "processor.py"]
