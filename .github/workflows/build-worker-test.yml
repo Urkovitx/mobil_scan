@@ -27,7 +27,8 @@ jobs:
       - name: Build and push worker test image
         uses: docker/build-push-action@v4
         with:
-          context: .
+          # Use the worker folder as the build context so Docker can access files inside it
+          context: ./worker
           file: ./worker/Dockerfile.test
           push: true
           tags: |
