@@ -1,0 +1,22 @@
+# Alternative Dockerfile using a heavier base image with pre-installed dependencies
+# Use this if the slim version continues to have apt-get issues
+
+FROM python:3.10
+
+WORKDIR /app
+
+# Copy requirements from parent directory
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY worker/processor.py .
+COPY shared/database.py .
+
+# Create necessary directories
+RUN mkdir -p /app/videos /app/frames /app/results
+
+# Run the worker
+CMD ["python", "processor.py"]

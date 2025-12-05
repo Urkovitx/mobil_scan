@@ -1,0 +1,19 @@
+FROM python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+# Install minimal system deps (opencv not included to keep image small)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-worker-test.txt ./
+RUN pip install --no-cache-dir --default-timeout=1000 -r requirements-worker-test.txt
+
+# Copy a tiny placeholder so build has something to copy (no heavy app files needed)
+COPY ./worker/processor.py ./
+
+CMD ["python", "processor.py"]

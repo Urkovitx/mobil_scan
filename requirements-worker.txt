@@ -1,0 +1,14 @@
+# Computer Vision & AI (només per worker)
+opencv-python-headless==4.9.0.80
+ultralytics==8.1.0
+paddlepaddle==3.0.0
+paddleocr==2.7.3
+
+# Base dependencies
+python-dotenv==1.0.0
+pillow==10.2.0
+numpy==1.26.3
+redis==5.0.1
+celery==5.3.6
+sqlalchemy==2.0.25
+loguru==0.7.2

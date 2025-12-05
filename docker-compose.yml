@@ -1,0 +1,121 @@
+services:
+  # Redis - Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: mobil_scan_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mobil_network
+
+  # PostgreSQL Database (better than SQLite for production)
+  db:
+    image: postgres:15-alpine
+    container_name: mobil_scan_db
+    environment:
+      POSTGRES_USER: mobilscan
+      POSTGRES_PASSWORD: mobilscan123
+      POSTGRES_DB: mobilscan_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobilscan"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mobil_network
+
+  # FastAPI Backend
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: mobil_scan_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./shared/videos:/app/videos
+      - ./shared/frames:/app/frames
+      - ./shared/results:/app/results
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://mobilscan:mobilscan123@db:5432/mobilscan_db
+      - UPLOAD_FOLDER=/app/videos
+      - FRAMES_FOLDER=/app/frames
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    networks:
+      - mobil_network
+    restart: unless-stopped
+
+  # Worker - Video Processor
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: mobil_scan_worker
+    volumes:
+      - ./shared/videos:/app/videos
+      - ./shared/frames:/app/frames
+      - ./shared/results:/app/results
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://mobilscan:mobilscan123@db:5432/mobilscan_db
+      - VIDEOS_FOLDER=/app/videos
+      - FRAMES_FOLDER=/app/frames
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    networks:
+      - mobil_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # Streamlit Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: mobil_scan_frontend
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./shared/videos:/app/videos
+      - ./shared/frames:/app/frames
+      - ./shared/results:/app/results
+    environment:
+      - API_URL=http://api:8000
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    depends_on:
+      - api
+    networks:
+      - mobil_network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  postgres_data:
+
+networks:
+  mobil_network:
+    driver: bridge
