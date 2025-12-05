@@ -2,16 +2,11 @@ name: Build and Push All Images
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ master ]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'worker/**'
 
 jobs:
   build-backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,6 +38,7 @@ jobs:
 
   build-frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,6 +70,7 @@ jobs:
 
   build-worker:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
