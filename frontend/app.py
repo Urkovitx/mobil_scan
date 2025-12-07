@@ -21,7 +21,7 @@ import os
 # CONFIGURATION
 # ============================================================================
 
-API_URL = os.getenv("API_URL", "http://api:8000")
+API_URL = os.getenv("API_URL", "http://backend:8000")
 ALLOWED_VIDEO_FORMATS = ["mp4", "mov", "avi", "mkv"]
 
 # Page configuration
@@ -296,7 +296,7 @@ def main():
         )
     
     # Main content tabs
-    tab1, tab2, tab3 = st.tabs(["📤 Upload Video", "📊 Audit Dashboard", "📜 Job History"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload Video", "📊 Audit Dashboard", "🤖 AI Analysis", "📜 Job History"])
     
     # ========================================================================
     # TAB 1: UPLOAD VIDEO
@@ -535,9 +535,152 @@ def main():
             st.info("👆 Enter a Job ID above or upload a video in the 'Upload Video' tab")
     
     # ========================================================================
-    # TAB 3: JOB HISTORY
+    # TAB 3: AI ANALYSIS
     # ========================================================================
     with tab3:
+        st.header("🤖 AI-Powered Analysis")
+        st.caption("Ask Phi-3 about your barcode detections")
+        
+        # Job selection
+        job_id_ai = st.text_input(
+            "Job ID for Analysis",
+            value=st.session_state.get("current_job_id", ""),
+            key="ai_job_id"
+        )
+        
+        if job_id_ai:
+            # Get job results
+            results_data = get_job_results(job_id_ai, min_confidence=0.0)
+            
+            if results_data and results_data.get("success"):
+                detections = results_data.get("detections", [])
+                
+                if detections:
+                    # Show summary
+                    st.subheader("📊 Detection Summary")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Detections", len(detections))
+                    with col2:
+                        readable = sum(1 for d in detections if d.get("detected_text") != "Unreadable")
+                        st.metric("Readable", readable)
+                    with col3:
+                        unreadable = len(detections) - readable
+                        st.metric("Unreadable", unreadable)
+                    
+                    st.markdown("---")
+                    
+                    # Detected barcodes list
+                    st.subheader("🏷️ Detected Barcodes")
+                    barcode_texts = [d.get("detected_text", "") for d in detections]
+                    unique_barcodes = list(set([b for b in barcode_texts if b != "Unreadable"]))
+                    
+                    if unique_barcodes:
+                        for i, barcode in enumerate(unique_barcodes, 1):
+                            st.code(f"{i}. {barcode}")
+                    else:
+                        st.warning("No readable barcodes found")
+                    
+                    st.markdown("---")
+                    
+                    # AI Chat Interface
+                    st.subheader("💬 Ask Phi-3")
+                    
+                    # Predefined questions
+                    st.markdown("**Quick Questions:**")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button("📊 Analyze detection quality", use_container_width=True):
+                            st.session_state.ai_question = f"Analyze these barcode detections:\n{barcode_texts}\n\nWhat can you tell me about the detection quality?"
+                        
+                        if st.button("🔍 Identify barcode types", use_container_width=True):
+                            st.session_state.ai_question = f"Identify the types of these barcodes:\n{unique_barcodes}"
+                    
+                    with col2:
+                        if st.button("💡 Suggest improvements", use_container_width=True):
+                            readable_pct = (readable / len(detections)) * 100
+                            st.session_state.ai_question = f"I detected {len(detections)} barcodes but only {readable} ({readable_pct:.1f}%) are readable. What can I do to improve?"
+                        
+                        if st.button("📈 Generate report", use_container_width=True):
+                            st.session_state.ai_question = f"Generate a summary report for these detections:\n{barcode_texts}"
+                    
+                    st.markdown("---")
+                    
+                    # Custom question
+                    user_question = st.text_area(
+                        "Or ask your own question:",
+                        value=st.session_state.get("ai_question", ""),
+                        height=100,
+                        placeholder="Example: What do these barcode numbers mean?"
+                    )
+                    
+                    if st.button("🚀 Ask Phi-3", type="primary", use_container_width=True):
+                        if user_question:
+                            with st.spinner("🤖 Phi-3 is thinking..."):
+                                try:
+                                    # Call Ollama API
+                                    response = requests.post(
+                                        "http://llm:11434/api/generate",
+                                        json={
+                                            "model": "phi3",
+                                            "prompt": user_question,
+                                            "stream": False
+                                        },
+                                        timeout=30
+                                    )
+                                    
+                                    if response.status_code == 200:
+                                        result = response.json()
+                                        answer = result.get("response", "No response")
+                                        
+                                        # Display answer
+                                        st.success("✅ Phi-3 Response:")
+                                        st.markdown(answer)
+                                        
+                                        # Save to history
+                                        if "ai_history" not in st.session_state:
+                                            st.session_state.ai_history = []
+                                        
+                                        st.session_state.ai_history.append({
+                                            "question": user_question,
+                                            "answer": answer,
+                                            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                        })
+                                    
+                                    else:
+                                        st.error(f"❌ Error: {response.status_code}")
+                                
+                                except Exception as e:
+                                    st.error(f"❌ Failed to connect to Phi-3: {str(e)}")
+                                    st.info("💡 Make sure Ollama is running with Phi-3 model")
+                        else:
+                            st.warning("⚠️ Please enter a question")
+                    
+                    # Show conversation history
+                    if "ai_history" in st.session_state and st.session_state.ai_history:
+                        st.markdown("---")
+                        st.subheader("📜 Conversation History")
+                        
+                        for i, item in enumerate(reversed(st.session_state.ai_history[-5:]), 1):
+                            with st.expander(f"💬 {item['timestamp']} - Question {i}"):
+                                st.markdown(f"**Q:** {item['question']}")
+                                st.markdown(f"**A:** {item['answer']}")
+                
+                else:
+                    st.info("📭 No detections found for this job")
+            
+            else:
+                st.warning("⚠️ Job not found or no results available")
+        
+        else:
+            st.info("👆 Enter a Job ID to start AI analysis")
+    
+    # ========================================================================
+    # TAB 4: JOB HISTORY
+    # ========================================================================
+    with tab4:
         st.header("Job History")
         
         try:

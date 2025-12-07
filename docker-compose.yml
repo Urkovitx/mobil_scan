@@ -71,11 +71,14 @@ services:
       - ./shared/videos:/app/videos
       - ./shared/frames:/app/frames
       - ./shared/results:/app/results
+      - ./worker/models:/app/models
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://mobilscan:mobilscan123@db:5432/mobilscan_db
       - VIDEOS_FOLDER=/app/videos
       - FRAMES_FOLDER=/app/frames
+      - RESULTS_FOLDER=/app/results
+      - MODEL_PATH=/app/models/best_barcode_model.pt
     depends_on:
       redis:
         condition: service_healthy

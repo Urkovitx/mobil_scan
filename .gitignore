@@ -62,3 +62,7 @@ docker-compose.override.yml
 *.pth
 *.pt
 *.onnx
+
+# Large files
+*.zip
+Barcodes.v1-no-augs.yolov8.zip

@@ -1,0 +1,49 @@
+# ============================================================================
+# Dockerfile Simple - Només Python (sense component C++)
+# ============================================================================
+# Aquest Dockerfile evita la compilació C++ i utilitza només els Python bindings
+# de zxing-cpp, que són suficients per al funcionament del worker.
+# ============================================================================
+
+FROM python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends \
+	   ca-certificates \
+	   ffmpeg \
+	   libgl1 \
+	   libglib2.0-0 \
+	   build-essential \
+	   cmake \
+	   g++ \
+	&& rm -rf /var/lib/apt/lists/*
+
+# Copy Python requirements and install
+# zxing-cpp Python bindings s'instal·laran aquí (versió 2.2.0+)
+COPY ./worker/requirements-worker.txt ./
+RUN pip install --no-cache-dir --default-timeout=1000 -r requirements-worker.txt
+
+# Copy application code
+COPY ./worker/processor.py ./
+COPY ./shared/database.py ./
+
+# Create necessary directories
+RUN mkdir -p /app/videos /app/frames /app/results /app/models
+
+# Set labels for image metadata
+LABEL maintainer="Mobile Industrial Scanner Team"
+LABEL description="Worker service with YOLOv8 + zxing-cpp (Python bindings)"
+LABEL zxing-cpp.version="2.2.0+"
+LABEL python.version="3.10"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+	CMD python -c "import redis; redis.from_url('${REDIS_URL}').ping()" || exit 1
+
+# Run the Python worker
+CMD ["python", "processor.py"]

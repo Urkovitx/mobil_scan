@@ -1,0 +1,139 @@
+# Docker Compose - Producció amb Imatges Pre-Built
+# Utilitza imatges de Docker Hub quan estan disponibles
+
+services:
+  # Redis - Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: mobil_scan_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mobil_network
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: mobil_scan_db
+    environment:
+      POSTGRES_USER: mobilscan
+      POSTGRES_PASSWORD: mobilscan123
+      POSTGRES_DB: mobilscan_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./shared/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobilscan"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mobil_network
+    restart: unless-stopped
+
+  # Ollama LLM Service (Edge AI) - SENSE HEALTHCHECK
+  llm:
+    image: ollama/ollama:latest
+    container_name: mobil_scan_llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    networks:
+      - mobil_network
+    restart: unless-stopped
+    # NO healthcheck - deixem que funcioni sense bloquejar
+
+  # FastAPI Backend - IMATGE PRE-BUILT
+  api:
+    image: urkovitx/mobil-scan-backend:latest
+    container_name: mobil_scan_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./shared/videos:/app/videos
+      - ./shared/frames:/app/frames
+      - ./shared/results:/app/results
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://mobilscan:mobilscan123@db:5432/mobilscan_db
+      - LLM_URL=http://llm:11434
+      - UPLOAD_FOLDER=/app/videos
+      - FRAMES_FOLDER=/app/frames
+    depends_on:
+      - redis
+      - db
+    networks:
+      - mobil_network
+    restart: unless-stopped
+
+  # Worker - IMATGE PRE-BUILT
+  worker:
+    image: urkovitx/mobil-scan-worker-test:latest
+    container_name: mobil_scan_worker
+    volumes:
+      - ./shared/videos:/app/videos
+      - ./shared/frames:/app/frames
+      - ./shared/results:/app/results
+      - ./worker/models:/app/models
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://mobilscan:mobilscan123@db:5432/mobilscan_db
+      - LLM_URL=http://llm:11434
+      - VIDEOS_FOLDER=/app/videos
+      - FRAMES_FOLDER=/app/frames
+      - RESULTS_FOLDER=/app/results
+      - MODEL_PATH=/app/models/best_barcode_model.pt
+    depends_on:
+      - redis
+      - db
+    networks:
+      - mobil_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # Streamlit Frontend - IMATGE PRE-BUILT
+  frontend:
+    image: urkovitx/mobil-scan-frontend:latest
+    container_name: mobil_scan_frontend
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./shared/videos:/app/videos
+      - ./shared/frames:/app/frames
+      - ./shared/results:/app/results
+    environment:
+      - API_URL=http://api:8000
+      - LLM_URL=http://llm:11434
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    depends_on:
+      - api
+    networks:
+      - mobil_network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  postgres_data:
+  ollama_data:
+
+networks:
+  mobil_network:
+    driver: bridge

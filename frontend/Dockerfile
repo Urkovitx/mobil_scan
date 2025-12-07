@@ -7,14 +7,17 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements from parent directory
-COPY requirements-base.txt .
+# Copy requirements (frontend specific, lighter)
+COPY frontend/requirements.txt .
 
 # Install Python dependencies with increased timeout
-RUN pip install --no-cache-dir --timeout=1000 -r requirements-base.txt
+RUN pip install --no-cache-dir --timeout=1000 -r requirements.txt
 
 # Copy application code
-COPY ./frontend/app.py .
+COPY frontend/app.py .
+
+# Copy Streamlit configuration
+COPY frontend/.streamlit /app/.streamlit
 
 # Create necessary directories
 RUN mkdir -p /app/videos /app/frames /app/results

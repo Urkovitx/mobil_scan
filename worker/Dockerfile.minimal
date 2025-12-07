@@ -1,0 +1,54 @@
+# ============================================================================
+# Dockerfile Minimal - Només Runtime (sense build tools)
+# ============================================================================
+# Aquest Dockerfile instal·la només les dependències runtime
+# i utilitza wheels pre-compilats de zxing-cpp
+# ============================================================================
+
+FROM python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_NO_CACHE_DIR=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Install ONLY runtime dependencies (no build tools)
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends \
+	   ca-certificates \
+	   ffmpeg \
+	   libgl1 \
+	   libglib2.0-0 \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& apt-get clean
+
+# Copy Python requirements
+COPY ./worker/requirements-worker.txt ./
+
+# Install Python packages with pre-compiled wheels
+# zxing-cpp should install from wheel (no compilation needed)
+RUN pip install --no-cache-dir \
+    --default-timeout=1000 \
+    --prefer-binary \
+    -r requirements-worker.txt
+
+# Copy application code
+COPY ./worker/processor.py ./
+COPY ./shared/database.py ./
+
+# Create necessary directories
+RUN mkdir -p /app/videos /app/frames /app/results /app/models
+
+# Set labels
+LABEL maintainer="Mobile Industrial Scanner Team"
+LABEL description="Worker service with YOLOv8 + zxing-cpp (minimal)"
+LABEL zxing-cpp.version="2.2.0+"
+LABEL python.version="3.10"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+	CMD python -c "import redis; redis.from_url('${REDIS_URL}').ping()" || exit 1
+
+# Run the Python worker
+CMD ["python", "processor.py"]

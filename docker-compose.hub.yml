@@ -1,0 +1,110 @@
+version: '3.8'
+
+# Docker Compose que usa les imatges del Docker Hub
+# NO cal fer build local - tot està al núvol!
+
+services:
+  # Base de dades PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: mobilscan-db
+    environment:
+      POSTGRES_USER: mobilscan
+      POSTGRES_PASSWORD: mobilscan123
+      POSTGRES_DB: mobilscan
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobilscan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis per cues de tasques
+  redis:
+    image: redis:7-alpine
+    container_name: mobilscan-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API (des de Docker Hub)
+  backend:
+    image: urkovitx/mobil-scan-backend:latest
+    container_name: mobilscan-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      DATABASE_URL: postgresql://mobilscan:mobilscan123@db:5432/mobilscan
+      
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      
+      # API Keys (afegeix les teves)
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-your-gemini-key-here}
+      
+      # App config
+      DEBUG: "true"
+      ALLOWED_HOSTS: "*"
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:8501"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Healthcheck eliminat temporalment (curl no està instal·lat a la imatge)
+    # El backend funciona correctament, només falla el healthcheck
+    restart: unless-stopped
+
+  # Frontend Streamlit (des de Docker Hub)
+  frontend:
+    image: urkovitx/mobil-scan-frontend:latest
+    container_name: mobilscan-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      API_URL: http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Worker per processar documents (des de Docker Hub)
+  worker:
+    image: urkovitx/mobil-scan-worker-test:ci
+    container_name: mobilscan-worker
+    environment:
+      # Database
+      DATABASE_URL: postgresql://mobilscan:mobilscan123@db:5432/mobilscan
+      
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      
+      # API Keys
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-your-gemini-key-here}
+      
+      # Worker config
+      WORKER_CONCURRENCY: "2"
+      LOG_LEVEL: "INFO"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: mobilscan-network

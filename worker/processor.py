@@ -1,6 +1,6 @@
 """
 Video Processor Worker - Mobile Industrial Scanner
-Extracts frames from videos and detects text using PaddleOCR
+Extracts frames from videos and detects barcodes using YOLOv8 + zxing-cpp
 """
 import os
 import sys
@@ -14,13 +14,17 @@ from pathlib import Path
 from loguru import logger
 from sqlalchemy.orm import Session
 
-# PaddleOCR import
+# YOLOv8 and Supervision imports
 try:
-    from paddleocr import PaddleOCR
-    HAVE_PADDLE = True
-except ImportError:
-    logger.warning("⚠️ PaddleOCR not available")
-    HAVE_PADDLE = False
+    from ultralytics import YOLO
+    import supervision as sv
+    import zxingcpp
+    HAVE_YOLO = True
+    HAVE_ZXING = True
+except ImportError as e:
+    logger.warning(f"⚠️ Import error: {e}")
+    HAVE_YOLO = False
+    HAVE_ZXING = False
 
 # Import database
 sys.path.append('/app')
@@ -30,26 +34,48 @@ from database import SessionLocal, Detection, VideoJob
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 VIDEOS_FOLDER = os.getenv("VIDEOS_FOLDER", "./videos")
 FRAMES_FOLDER = os.getenv("FRAMES_FOLDER", "./frames")
+RESULTS_FOLDER = os.getenv("RESULTS_FOLDER", "./results")
 FRAME_INTERVAL = int(os.getenv("FRAME_INTERVAL", "30"))  # Extract 1 frame every N frames
+MODEL_PATH = os.getenv("MODEL_PATH", "/app/models/best_barcode_model.pt")
 
 # Ensure folders exist
 os.makedirs(FRAMES_FOLDER, exist_ok=True)
+os.makedirs(RESULTS_FOLDER, exist_ok=True)
 
-# Initialize PaddleOCR
-if HAVE_PADDLE:
+# Initialize YOLO model
+yolo_model = None
+box_annotator = None
+label_annotator = None
+
+if HAVE_YOLO:
     try:
-        ocr_engine = PaddleOCR(
-            use_angle_cls=True,
-            lang='en',
-            use_gpu=False,  # Set to True if GPU available
-            show_log=False
+        # Check if model exists
+        if os.path.exists(MODEL_PATH):
+            yolo_model = YOLO(MODEL_PATH)
+            logger.info(f"✅ YOLOv8 model loaded from: {MODEL_PATH}")
+        else:
+            logger.warning(f"⚠️ Model not found at {MODEL_PATH}, using default YOLOv8n")
+            yolo_model = YOLO('yolov8n.pt')  # Fallback to default model
+        
+        # Initialize Supervision annotators
+        box_annotator = sv.BoxAnnotator(
+            thickness=2,
+            text_thickness=1,
+            text_scale=0.5
         )
-        logger.info("✅ PaddleOCR initialized successfully")
+        label_annotator = sv.LabelAnnotator(
+            text_thickness=1,
+            text_scale=0.5,
+            text_padding=5
+        )
+        
+        logger.info("✅ Supervision annotators initialized")
+        
     except Exception as e:
-        logger.error(f"❌ Failed to initialize PaddleOCR: {e}")
-        ocr_engine = None
+        logger.error(f"❌ Failed to initialize YOLO: {e}")
+        yolo_model = None
 else:
-    ocr_engine = None
+    logger.error("❌ YOLOv8 not available")
 
 
 def extract_frames(video_path: str, job_id: str, frame_interval: int = 30):
@@ -110,55 +136,276 @@ def extract_frames(video_path: str, job_id: str, frame_interval: int = 30):
         raise
 
 
-def detect_text_paddleocr(frame, frame_path: str):
+def preprocess_barcode_region(crop):
     """
-    Detect text in frame using PaddleOCR
+    Preprocess cropped region for better barcode reading
+    
+    Applies multiple techniques to improve readability:
+    - Grayscale conversion
+    - Contrast enhancement (CLAHE)
+    - Adaptive binarization
+    - Noise reduction
+    - Resizing if too small
+    
+    Args:
+        crop: Cropped image region (numpy array)
+        
+    Returns:
+        list: List of preprocessed images to try
+    """
+    processed_images = []
+    
+    try:
+        # 1. Original in grayscale
+        if len(crop.shape) == 3:
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = crop.copy()
+        processed_images.append(gray)
+        
+        # 2. CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        enhanced = clahe.apply(gray)
+        processed_images.append(enhanced)
+        
+        # 3. Binary threshold (Otsu)
+        _, binary_otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        processed_images.append(binary_otsu)
+        
+        # 4. Adaptive threshold (Gaussian)
+        binary_adaptive = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+            cv2.THRESH_BINARY, 11, 2
+        )
+        processed_images.append(binary_adaptive)
+        
+        # 5. Noise reduction + binarization
+        denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+        _, binary_denoised = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        processed_images.append(binary_denoised)
+        
+        # 6. Resize if too small (minimum 200px width)
+        h, w = gray.shape
+        if w < 200:
+            scale = 200 / w
+            resized_images = []
+            for img in processed_images[:3]:  # Only resize first 3 to avoid too many
+                resized = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+                resized_images.append(resized)
+            processed_images.extend(resized_images)
+        
+    except Exception as e:
+        logger.error(f"❌ Preprocessing error: {e}")
+        # Return at least the original
+        if len(crop.shape) == 3:
+            processed_images = [cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)]
+        else:
+            processed_images = [crop]
+    
+    return processed_images
+
+
+def decode_barcode_with_preprocessing(crop):
+    """
+    Try to decode barcode with multiple preprocessing techniques
+    
+    Args:
+        crop: Cropped image region
+        
+    Returns:
+        tuple: (barcode_text, decode_confidence)
+    """
+    # Get all preprocessed versions
+    processed_images = preprocess_barcode_region(crop)
+    
+    best_result = None
+    best_confidence = 0.0
+    best_format = None
+    
+    # Try each preprocessed image
+    for idx, img in enumerate(processed_images):
+        try:
+            # Read barcodes with enhanced settings
+            barcodes = zxingcpp.read_barcodes(
+                img,
+                formats=zxingcpp.BarcodeFormat.Any,
+                try_harder=True,
+                try_rotate=True,
+                try_downscale=True
+            )
+            
+            if barcodes and len(barcodes) > 0:
+                for barcode in barcodes:
+                    text = barcode.text
+                    format_name = str(barcode.format)
+                    
+                    # Calculate confidence based on barcode quality
+                    confidence = 0.5  # Base confidence
+                    
+                    # Length bonus
+                    if len(text) >= 8:
+                        confidence += 0.2
+                    if len(text) >= 12:
+                        confidence += 0.1
+                    
+                    # Format bonus
+                    if format_name in ['EAN13', 'EAN8', 'UPCA', 'UPCE']:
+                        confidence += 0.15
+                    elif format_name in ['Code128', 'Code39', 'Code93']:
+                        confidence += 0.1
+                    elif format_name in ['QRCode', 'DataMatrix']:
+                        confidence += 0.05
+                    
+                    # Character validity bonus
+                    if text.isdigit():
+                        confidence += 0.05
+                    
+                    # Preprocessing method bonus (earlier methods are better)
+                    confidence += (1.0 - (idx / len(processed_images))) * 0.1
+                    
+                    confidence = min(confidence, 1.0)
+                    
+                    if confidence > best_confidence:
+                        best_result = text
+                        best_confidence = confidence
+                        best_format = format_name
+                        
+        except Exception as e:
+            continue
+    
+    if best_result:
+        logger.info(f"✅ Decoded: {best_result} (format: {best_format}, confidence: {best_confidence:.2f})")
+        return (best_result, best_confidence)
+    else:
+        return ("Unreadable", 0.0)
+
+
+def detect_and_decode_barcodes(frame, frame_path: str, job_id: str, frame_number: int):
+    """
+    Detect barcodes using YOLOv8 and decode using zxing-cpp
+    WITH IMPROVED PREPROCESSING AND SETTINGS
     
     Args:
         frame: OpenCV image (numpy array)
         frame_path: Path where frame is saved
+        job_id: Job identifier for saving annotated frames
+        frame_number: Frame number for naming
         
     Returns:
         list: List of detections with text, confidence, and bounding boxes
     """
-    if not ocr_engine:
-        logger.warning("⚠️ OCR engine not available")
+    if not yolo_model or not HAVE_ZXING:
+        logger.warning("⚠️ YOLO or zxing-cpp not available")
         return []
     
     try:
-        # Run OCR
-        result = ocr_engine.ocr(frame, cls=True)
+        # Run YOLO detection with OPTIMIZED PARAMETERS
+        results = yolo_model(
+            frame,
+            conf=0.25,  # Lower threshold to detect more
+            iou=0.45,   # IoU threshold for NMS
+            max_det=10,  # Maximum detections per image
+            verbose=False
+        )[0]
         
-        if not result or not result[0]:
+        # Convert to Supervision Detections
+        detections = sv.Detections.from_ultralytics(results)
+        
+        if len(detections) == 0:
             return []
         
-        detections = []
+        decoded_detections = []
+        labels = []
         
-        for line in result[0]:
-            # Extract bounding box and text
-            bbox = line[0]  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
-            text_info = line[1]  # (text, confidence)
+        # Iterate over each detection
+        for i in range(len(detections)):
+            # Get bounding box coordinates
+            x1, y1, x2, y2 = detections.xyxy[i].astype(int)
+            yolo_confidence = detections.confidence[i]
             
-            text = text_info[0]
-            confidence = text_info[1]
+            # SKIP LOW CONFIDENCE DETECTIONS
+            if yolo_confidence < 0.3:
+                logger.debug(f"⏭️ Skipping low confidence detection: {yolo_confidence:.2f}")
+                continue
             
-            # Convert bbox to simple format (x1, y1, x2, y2)
-            x_coords = [point[0] for point in bbox]
-            y_coords = [point[1] for point in bbox]
+            # Ensure coordinates are within frame bounds
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(frame.shape[1], x2)
+            y2 = min(frame.shape[0], y2)
             
-            x1, y1 = int(min(x_coords)), int(min(y_coords))
-            x2, y2 = int(max(x_coords)), int(max(y_coords))
+            # ADD PADDING to crop (helps with edge cases)
+            padding = 10
+            x1 = max(0, x1 - padding)
+            y1 = max(0, y1 - padding)
+            x2 = min(frame.shape[1], x2 + padding)
+            y2 = min(frame.shape[0], y2 + padding)
             
-            detections.append({
-                'text': text,
-                'confidence': float(confidence),
-                'bbox': (x1, y1, x2, y2)
+            # Crop the detected region
+            crop = frame[y1:y2, x1:x2]
+            
+            # SKIP TOO SMALL CROPS
+            if crop.shape[0] < 20 or crop.shape[1] < 20:
+                logger.warning(f"⚠️ Crop too small: {crop.shape}, skipping")
+                continue
+            
+            # Decode with IMPROVED PREPROCESSING
+            barcode_text, decode_confidence = decode_barcode_with_preprocessing(crop)
+            
+            # COMBINE YOLO + DECODE CONFIDENCE
+            final_confidence = (yolo_confidence + decode_confidence) / 2.0
+            
+            logger.info(f"{'✅' if barcode_text != 'Unreadable' else '⚠️'} "
+                       f"Frame {frame_number}: {barcode_text} "
+                       f"(YOLO: {yolo_confidence:.2f}, Decode: {decode_confidence:.2f}, "
+                       f"Final: {final_confidence:.2f})")
+            
+            # Create label for annotation
+            label = f"{barcode_text} {final_confidence:.2f}"
+            labels.append(label)
+            
+            # Store detection
+            decoded_detections.append({
+                'text': barcode_text,
+                'confidence': float(final_confidence),
+                'bbox': (int(x1), int(y1), int(x2), int(y2)),
+                'yolo_confidence': float(yolo_confidence),
+                'decode_confidence': float(decode_confidence)
             })
         
-        return detections
+        # Annotate frame with detections
+        if len(decoded_detections) > 0:
+            try:
+                # Annotate with boxes
+                annotated_frame = box_annotator.annotate(
+                    scene=frame.copy(),
+                    detections=detections
+                )
+                
+                # Annotate with labels
+                annotated_frame = label_annotator.annotate(
+                    scene=annotated_frame,
+                    detections=detections,
+                    labels=labels
+                )
+                
+                # Save annotated frame
+                job_results_folder = os.path.join(RESULTS_FOLDER, job_id)
+                os.makedirs(job_results_folder, exist_ok=True)
+                
+                annotated_filename = f"annotated_frame_{frame_number:06d}.jpg"
+                annotated_path = os.path.join(job_results_folder, annotated_filename)
+                cv2.imwrite(annotated_path, annotated_frame)
+                
+                logger.info(f"💾 Saved annotated frame: {annotated_filename}")
+                
+            except Exception as annotate_error:
+                logger.error(f"❌ Annotation error: {annotate_error}")
+        
+        return decoded_detections
         
     except Exception as e:
-        logger.error(f"❌ OCR error: {e}")
+        logger.error(f"❌ Detection/decoding error: {e}")
         return []
 
 
@@ -189,14 +436,14 @@ def process_video(job_data: dict):
         job.started_at = datetime.utcnow()
         db.commit()
         
-        # Extract frames and detect text
+        # Extract frames and detect barcodes
         total_detections = 0
         processed_frames = 0
         
         for frame_number, timestamp, frame, frame_path in extract_frames(video_path, job_id, FRAME_INTERVAL):
             try:
-                # Detect text in frame
-                detections = detect_text_paddleocr(frame, frame_path)
+                # Detect and decode barcodes in frame
+                detections = detect_and_decode_barcodes(frame, frame_path, job_id, frame_number)
                 
                 # Save detections to database
                 for det in detections:
@@ -271,6 +518,8 @@ def worker_loop():
     Main worker loop - listens to Redis queue and processes videos
     """
     logger.info("🚀 Starting video processor worker...")
+    logger.info(f"📦 YOLO available: {HAVE_YOLO}")
+    logger.info(f"📦 zxing-cpp available: {HAVE_ZXING}")
     
     # Connect to Redis
     try:

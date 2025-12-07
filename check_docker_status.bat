@@ -1,42 +1,37 @@
 @echo off
 echo ========================================
-echo CHECKING MOBIL_SCAN DOCKER STATUS
+echo COMPROVANT ESTAT DE DOCKER
 echo ========================================
 echo.
 
-echo 1. Checking if containers exist...
-echo.
-docker ps -a --filter "name=mobil" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-echo.
+echo Comprovant si Docker Desktop està executant-se...
+docker info >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo ❌ DOCKER NO ESTÀ FUNCIONANT!
+    echo.
+    echo Opcions:
+    echo 1. Obre Docker Desktop manualment
+    echo 2. Espera 30-60 segons que s'iniciï
+    echo 3. Torna a executar aquest script per verificar
+    echo.
+    echo O executa: REINICIAR_DOCKER_I_BUILD.bat
+    echo.
+    pause
+    exit /b 1
+)
 
-echo 2. Checking if images exist...
+echo ✅ Docker està funcionant correctament!
 echo.
-docker images --filter "reference=mobil*" --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+echo Informació de Docker:
+docker info | findstr "Server Version"
+docker info | findstr "Total Memory"
+docker info | findstr "CPUs"
 echo.
-
-echo 3. Checking docker-compose status...
-echo.
-cd /d "%~dp0"
-docker-compose ps
-echo.
-
-echo 4. Checking for build errors...
-echo.
-docker-compose logs --tail=20
-echo.
-
 echo ========================================
-echo DIAGNOSIS
+echo POTS EXECUTAR EL BUILD ARA!
 echo ========================================
 echo.
-echo If you see NO containers above, it means:
-echo - Build is still in progress, OR
-echo - Build failed, OR
-echo - Containers were never created
-echo.
-echo To fix:
-echo 1. Run: docker-compose up -d --build
-echo 2. Wait 5-10 minutes for build
-echo 3. Check Docker Desktop again
+echo Executa: BUILD_I_PUSH_LOCAL_FIXED.bat
 echo.
 pause

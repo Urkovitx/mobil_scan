@@ -1,0 +1,142 @@
+version: '3.8'
+
+# Docker Compose amb imatges de Docker Hub
+# Inclou totes les millores: preprocessament + IA
+
+services:
+  # Redis - Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: mobil_scan_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mobil_network
+
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: mobil_scan_db
+    environment:
+      POSTGRES_USER: mobilscan
+      POSTGRES_PASSWORD: mobilscan123
+      POSTGRES_DB: mobilscan_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobilscan"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mobil_network
+
+  # FastAPI Backend (des de Docker Hub)
+  api:
+    image: urkovitx/mobil-scan-backend:latest
+    container_name: mobil_scan_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./shared/videos:/app/videos
+      - ./shared/frames:/app/frames
+      - ./shared/results:/app/results
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://mobilscan:mobilscan123@db:5432/mobilscan_db
+      - UPLOAD_FOLDER=/app/videos
+      - FRAMES_FOLDER=/app/frames
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    networks:
+      - mobil_network
+    restart: unless-stopped
+
+  # Worker - Video Processor (AMB MILLORES PREPROCESSAMENT!)
+  worker:
+    image: urkovitx/mobil-scan-worker:latest
+    container_name: mobil_scan_worker
+    volumes:
+      - ./shared/videos:/app/videos
+      - ./shared/frames:/app/frames
+      - ./shared/results:/app/results
+      - ./worker/models:/app/models
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://mobilscan:mobilscan123@db:5432/mobilscan_db
+      - VIDEOS_FOLDER=/app/videos
+      - FRAMES_FOLDER=/app/frames
+      - RESULTS_FOLDER=/app/results
+      - MODEL_PATH=/app/models/best_barcode_model.pt
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    networks:
+      - mobil_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # Streamlit Frontend (AMB PESTANYA IA!)
+  frontend:
+    image: urkovitx/mobil-scan-frontend:latest
+    container_name: mobil_scan_frontend
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./shared/videos:/app/videos
+      - ./shared/frames:/app/frames
+      - ./shared/results:/app/results
+    environment:
+      - API_URL=http://api:8000
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    depends_on:
+      - api
+    networks:
+      - mobil_network
+    restart: unless-stopped
+
+  # Ollama LLM (Phi-3)
+  llm:
+    image: ollama/ollama:latest
+    container_name: mobil_scan_llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - mobil_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  redis_data:
+  postgres_data:
+  ollama_data:
+
+networks:
+  mobil_network:
+    driver: bridge

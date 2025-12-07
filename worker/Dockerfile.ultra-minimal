@@ -1,0 +1,48 @@
+FROM python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /app
+
+# Pas 1: Només dependències del sistema (ràpid)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    ffmpeg \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pas 2: Només numpy (base per tot)
+RUN pip install --no-cache-dir numpy==1.24.3
+
+# Pas 3: Només opencv (sense dependències pesades)
+RUN pip install --no-cache-dir opencv-python-headless==4.8.0.74
+
+# Pas 4: Només zxing-cpp (el que necessitem)
+RUN pip install --no-cache-dir zxing-cpp==2.2.0
+
+# Pas 5: Només Pillow
+RUN pip install --no-cache-dir Pillow==10.0.0
+
+# Pas 6: Database i Redis (lleugers)
+RUN pip install --no-cache-dir \
+    sqlalchemy==2.0.23 \
+    psycopg2-binary==2.9.9 \
+    redis==5.0.1
+
+# Pas 7: Logging
+RUN pip install --no-cache-dir \
+    loguru==0.7.2 \
+    python-dotenv==1.0.0
+
+# Pas 8: YOLO i Supervision (els més pesats, al final)
+RUN pip install --no-cache-dir ultralytics==8.0.196
+RUN pip install --no-cache-dir supervision==0.16.0
+
+# Copiar codi
+COPY ./worker/processor.py ./
+COPY ./shared/database.py ./
+
+# Crear directoris
+RUN mkdir -p /app/videos /app/frames /app/results /app/models
+
+CMD ["python", "processor.py"]

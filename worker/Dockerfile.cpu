@@ -1,0 +1,61 @@
+FROM python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+# Instal·lar dependències del sistema
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    ffmpeg \
+    libgl1 \
+    libglib2.0-0 \
+    build-essential \
+    cmake \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# IMPORTANT: Instal·lar PyTorch CPU PRIMER (evita descarregar CUDA)
+RUN pip install --no-cache-dir \
+    torch==2.0.1+cpu \
+    torchvision==0.15.2+cpu \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# Instal·lar numpy (requerit per moltes llibreries)
+RUN pip install --no-cache-dir numpy==1.24.3
+
+# Instal·lar OpenCV
+RUN pip install --no-cache-dir opencv-python-headless==4.8.0.74
+
+# Instal·lar zxing-cpp
+RUN pip install --no-cache-dir zxing-cpp==2.2.0
+
+# Instal·lar Pillow
+RUN pip install --no-cache-dir Pillow==10.0.0
+
+# Instal·lar dependències de base de dades
+RUN pip install --no-cache-dir \
+    sqlalchemy==2.0.23 \
+    psycopg2-binary==2.9.9 \
+    redis==5.0.1
+
+# Instal·lar utilitats
+RUN pip install --no-cache-dir \
+    loguru==0.7.2 \
+    python-dotenv==1.0.0
+
+# Instal·lar ultralytics (ara ja no descarregarà CUDA perquè PyTorch CPU ja està instal·lat)
+RUN pip install --no-cache-dir ultralytics==8.0.196
+
+# Instal·lar supervision
+RUN pip install --no-cache-dir supervision==0.16.0
+
+# Copiar codi de l'aplicació
+COPY ./worker/processor.py ./
+COPY ./shared/database.py ./
+
+# Crear directoris necessaris
+RUN mkdir -p /app/videos /app/frames /app/results /app/models
+
+# Executar worker
+CMD ["python", "processor.py"]

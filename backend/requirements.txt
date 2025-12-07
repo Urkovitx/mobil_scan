@@ -1,0 +1,21 @@
+# Web Framework & API (només el necessari per backend)
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Task Queue & Caching
+redis==5.0.1
+celery==5.3.6
+
+# Database
+sqlalchemy==2.0.25
+alembic==1.13.1
+psycopg2==2.9.9
+
+# Utilities
+python-dotenv==1.0.0
+pillow==10.2.0
+requests==2.31.0
+
+# Logging
+loguru==0.7.2
