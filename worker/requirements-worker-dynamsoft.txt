@@ -8,7 +8,7 @@ opencv-python-headless>=4.8.0  # OpenCV without GUI (lighter)
 numpy>=1.24.0,<2.0.0       # Numerical operations
 
 # Barcode decoding - PROFESSIONAL
-dynamsoft_barcode_reader_bundle>=10.0.0  # Dynamsoft Barcode Reader (PROFESSIONAL)
+dbr>=9.6.0                  # Dynamsoft Barcode Reader (PROFESSIONAL)
 
 # Database
 sqlalchemy>=2.0.0          # Database ORM

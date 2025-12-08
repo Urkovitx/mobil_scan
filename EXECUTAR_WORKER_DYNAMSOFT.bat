@@ -28,7 +28,7 @@ set DYNAMSOFT_LICENSE=t0087YQEAAAo+62EJwjM/Ii+Bb6cm32Kz/IbSOfahkv3f1xUKOznl1gmVl
 echo.
 echo [3/4] Instal·lant Dynamsoft i dependencies...
 cd worker
-pip install --quiet dynamsoft_barcode_reader_bundle ultralytics supervision opencv-python numpy redis sqlalchemy pillow loguru psycopg2-binary
+pip install --quiet dbr ultralytics supervision opencv-python numpy redis sqlalchemy pillow loguru psycopg2-binary
 
 echo.
 echo [4/4] Verificant base de dades...
