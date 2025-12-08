@@ -27,7 +27,7 @@ set MODEL_PATH=./models/best_barcode_model.pt
 echo.
 echo [3/4] Instal·lant dependencies necessaries...
 cd worker
-pip install --quiet zxingcpp ultralytics supervision redis sqlalchemy pillow loguru opencv-python numpy psycopg2-binary
+pip install --quiet zxing-cpp ultralytics supervision redis sqlalchemy pillow loguru opencv-python numpy psycopg2-binary
 
 echo.
 echo [4/4] Verificant base de dades...
