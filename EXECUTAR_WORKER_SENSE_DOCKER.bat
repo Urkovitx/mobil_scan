@@ -11,8 +11,12 @@ echo.
 pause
 
 echo.
-echo [1/3] Configurant variables d'entorn...
-REM Usa serveis Cloud (NO locals)
+echo [1/4] Activant entorn Conda...
+call C:\Users\ferra\anaconda3\Scripts\activate.bat
+call conda activate py313
+
+echo.
+echo [2/4] Configurant variables d'entorn...
 set REDIS_URL=redis://localhost:6379/0
 set DATABASE_URL=sqlite:///./worker_local.db
 set VIDEOS_FOLDER=../shared/videos
@@ -21,34 +25,24 @@ set RESULTS_FOLDER=../shared/results
 set MODEL_PATH=./models/best_barcode_model.pt
 
 echo.
-echo [2/3] Instal·lant depend├¿ncies Python...
+echo [3/4] Instal·lant dependencies necessaries...
 cd worker
-
-REM Crea entorn virtual si no existeix
-if not exist "venv" (
-    echo Creant entorn virtual...
-    python -m venv venv
-)
-
-call venv\Scripts\activate
-
-echo Instal·lant paquets necessaris...
-pip install --quiet --upgrade pip
-pip install --quiet redis==5.0.1 sqlalchemy==2.0.25 pillow==10.2.0 loguru==0.7.2 opencv-python==4.8.1.78 numpy==1.24.3
+pip install --quiet redis sqlalchemy pillow loguru opencv-python numpy psycopg2-binary
 
 echo.
-echo [3/3] Creant base de dades local...
-python -c "from sqlalchemy import create_engine; engine = create_engine('sqlite:///./worker_local.db'); print('✓ Base de dades creada')"
+echo [4/4] Verificant base de dades...
+python -c "from sqlalchemy import create_engine; engine = create_engine('sqlite:///./worker_local.db'); print('Base de dades OK')" 2>nul || echo Base de dades es creara automaticament
 
 echo.
 echo ========================================
-echo WORKER EN EXECUCIÓ (SENSE DOCKER!)
+echo WORKER EN EXECUCIO (SENSE DOCKER!)
 echo ========================================
 echo.
-echo NOTA: Aquest worker usa SQLite local.
-echo Per connectar a serveis Cloud, edita les URLs a dalt.
+echo Entorn: Conda py313
+echo Base de dades: SQLite local
+echo Redis: localhost:6379
 echo.
-echo El worker està escoltant jobs.
+echo El worker esta escoltant jobs...
 echo Per aturar: Prem Ctrl+C
 echo.
 
