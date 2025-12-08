@@ -27,8 +27,13 @@ except ImportError as e:
     HAVE_ZXING = False
 
 # Import database
-sys.path.append('/app')
-from database import SessionLocal, Detection, VideoJob
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+try:
+    from shared.database import SessionLocal, Detection, VideoJob
+except ImportError:
+    # Fallback for local execution
+    sys.path.append('../shared')
+    from database import SessionLocal, Detection, VideoJob
 
 # Configuration
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
