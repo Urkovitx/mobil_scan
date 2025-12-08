@@ -1,0 +1,27 @@
+# Worker Requirements - YOLOv8 + Supervision + DYNAMSOFT (PROFESSIONAL)
+# Updated to use Dynamsoft Barcode Reader for superior accuracy
+
+# Core ML/CV dependencies
+ultralytics>=8.0.0          # YOLOv8 for object detection
+supervision>=0.16.0         # Bounding box annotation and utilities
+opencv-python-headless>=4.8.0  # OpenCV without GUI (lighter)
+numpy>=1.24.0,<2.0.0       # Numerical operations
+
+# Barcode decoding - PROFESSIONAL
+dynamsoft_barcode_reader_bundle>=10.0.0  # Dynamsoft Barcode Reader (PROFESSIONAL)
+
+# Database
+sqlalchemy>=2.0.0          # Database ORM
+psycopg2-binary>=2.9.0     # PostgreSQL driver
+
+# Queue/Cache
+redis>=4.5.0               # Redis client for job queue
+
+# Utilities
+loguru>=0.7.0              # Better logging
+python-dotenv>=1.0.0       # Environment variables
+pillow>=10.0.0             # Image processing
+
+# Optional: For better performance
+# torch>=2.0.0             # PyTorch (if you want GPU support)
+# torchvision>=0.15.0      # PyTorch vision utilities
