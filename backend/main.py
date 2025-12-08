@@ -35,6 +35,26 @@ except ImportError:
     gemini_model = None
     logger.warning("⚠️ google-generativeai not installed, AI features disabled")
 
+# Google Cloud Run Jobs for worker
+try:
+    from google.cloud import run_v2
+    from google.api_core import exceptions as google_exceptions
+    PROJECT_ID = os.getenv("GCP_PROJECT_ID", "mobil-scan-app")
+    REGION = os.getenv("GCP_REGION", "europe-west1")
+    WORKER_IMAGE = os.getenv("WORKER_IMAGE", f"gcr.io/{PROJECT_ID}/mobil-scan-worker:latest")
+    USE_CLOUD_RUN_JOBS = os.getenv("USE_CLOUD_RUN_JOBS", "true").lower() == "true"
+    
+    if USE_CLOUD_RUN_JOBS:
+        jobs_client = run_v2.JobsClient()
+        logger.info("✅ Cloud Run Jobs client configured")
+    else:
+        jobs_client = None
+        logger.info("ℹ️ Using Redis queue (Cloud Run Jobs disabled)")
+except ImportError:
+    jobs_client = None
+    USE_CLOUD_RUN_JOBS = False
+    logger.warning("⚠️ google-cloud-run not installed, using Redis queue")
+
 # Configuration
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "./videos")
@@ -140,26 +160,97 @@ async def upload_video(
         db.commit()
         db.refresh(video_job)
         
-        # Push job to Redis queue
-        if redis_client:
-            job_data = {
-                "job_id": job_id,
-                "video_path": video_path,
-                "video_name": file.filename
-            }
-            redis_client.lpush("video_queue", json.dumps(job_data))
-            logger.info(f"✅ Job {job_id} added to queue")
+        # Launch Cloud Run Job or push to Redis queue
+        if USE_CLOUD_RUN_JOBS and jobs_client:
+            try:
+                # Create Cloud Run Job execution
+                job_name = f"process-video-{job_id[:8]}"
+                parent = f"projects/{PROJECT_ID}/locations/{REGION}"
+                
+                execution_request = run_v2.RunJobRequest(
+                    name=f"{parent}/jobs/{job_name}",
+                    overrides=run_v2.RunJobRequest.Overrides(
+                        container_overrides=[
+                            run_v2.RunJobRequest.Overrides.ContainerOverride(
+                                env=[
+                                    run_v2.EnvVar(name="JOB_ID", value=job_id),
+                                    run_v2.EnvVar(name="VIDEO_PATH", value=video_path),
+                                    run_v2.EnvVar(name="VIDEO_NAME", value=file.filename),
+                                    run_v2.EnvVar(name="REDIS_URL", value=REDIS_URL),
+                                    run_v2.EnvVar(name="DATABASE_URL", value=os.getenv("DATABASE_URL")),
+                                ]
+                            )
+                        ]
+                    )
+                )
+                
+                operation = jobs_client.run_job(request=execution_request)
+                logger.info(f"✅ Cloud Run Job launched: {job_name}")
+                
+                return {
+                    "success": True,
+                    "job_id": job_id,
+                    "video_name": file.filename,
+                    "file_size_mb": round(file_size_mb, 2),
+                    "status": "queued",
+                    "message": "Video uploaded successfully and Cloud Run Job launched",
+                    "worker_type": "cloud_run_job"
+                }
+                
+            except Exception as job_error:
+                logger.error(f"❌ Failed to launch Cloud Run Job: {job_error}")
+                logger.info("⚠️ Falling back to Redis queue")
+                
+                # Fallback to Redis
+                if redis_client:
+                    job_data = {
+                        "job_id": job_id,
+                        "video_path": video_path,
+                        "video_name": file.filename
+                    }
+                    redis_client.lpush("video_queue", json.dumps(job_data))
+                    logger.info(f"✅ Job {job_id} added to Redis queue")
+                    
+                    return {
+                        "success": True,
+                        "job_id": job_id,
+                        "video_name": file.filename,
+                        "file_size_mb": round(file_size_mb, 2),
+                        "status": "queued",
+                        "message": "Video uploaded successfully and queued for processing (Redis fallback)",
+                        "worker_type": "redis_queue"
+                    }
+                else:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Worker service unavailable (Cloud Run Job failed and Redis not available)"
+                    )
         else:
-            logger.warning("⚠️ Redis not available, job not queued")
-        
-        return {
-            "success": True,
-            "job_id": job_id,
-            "video_name": file.filename,
-            "file_size_mb": round(file_size_mb, 2),
-            "status": "queued",
-            "message": "Video uploaded successfully and queued for processing"
-        }
+            # Use Redis queue
+            if redis_client:
+                job_data = {
+                    "job_id": job_id,
+                    "video_path": video_path,
+                    "video_name": file.filename
+                }
+                redis_client.lpush("video_queue", json.dumps(job_data))
+                logger.info(f"✅ Job {job_id} added to Redis queue")
+                
+                return {
+                    "success": True,
+                    "job_id": job_id,
+                    "video_name": file.filename,
+                    "file_size_mb": round(file_size_mb, 2),
+                    "status": "queued",
+                    "message": "Video uploaded successfully and queued for processing",
+                    "worker_type": "redis_queue"
+                }
+            else:
+                logger.warning("⚠️ Redis not available, job not queued")
+                raise HTTPException(
+                    status_code=503,
+                    detail="Worker service unavailable (Redis not connected)"
+                )
         
     except HTTPException:
         raise
