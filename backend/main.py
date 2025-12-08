@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from pydantic import BaseModel
 import os
 import uuid
 import redis
@@ -18,6 +19,21 @@ from loguru import logger
 import sys
 sys.path.append('/app')
 from database import get_db, init_db, Detection, VideoJob
+
+# Google Gemini for AI analysis
+try:
+    import google.generativeai as genai
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_model = genai.GenerativeModel('gemini-pro')
+        logger.info("✅ Gemini AI configured")
+    else:
+        gemini_model = None
+        logger.warning("⚠️ GEMINI_API_KEY not set, AI features disabled")
+except ImportError:
+    gemini_model = None
+    logger.warning("⚠️ google-generativeai not installed, AI features disabled")
 
 # Configuration
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -322,6 +338,90 @@ async def get_stats(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"❌ Error getting stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class AIQueryRequest(BaseModel):
+    job_id: str
+    question: str
+
+
+@app.post("/ai/analyze")
+async def ai_analyze(request: AIQueryRequest, db: Session = Depends(get_db)):
+    """
+    Analyze barcode detections with AI (Gemini or Ollama)
+    
+    Args:
+        job_id: Job identifier
+        question: User's question about the detections
+        
+    Returns:
+        AI-generated response about the barcode detections
+    """
+    try:
+        # Check if AI is available
+        if not gemini_model:
+            raise HTTPException(
+                status_code=503,
+                detail="AI service not available. Please configure GEMINI_API_KEY."
+            )
+        
+        # Get job and detections
+        job = db.query(VideoJob).filter(VideoJob.job_id == request.job_id).first()
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        detections = db.query(Detection)\
+            .filter(Detection.job_id == request.job_id)\
+            .limit(100)\
+            .all()
+        
+        if not detections:
+            return {
+                "success": True,
+                "response": "No s'han trobat deteccions per aquest treball. Puja un vídeo primer per poder analitzar els codis de barres."
+            }
+        
+        # Prepare context for AI
+        detection_summary = []
+        for det in detections:
+            detection_summary.append({
+                "text": det.detected_text,
+                "confidence": f"{det.confidence*100:.1f}%",
+                "frame": det.frame_number
+            })
+        
+        # Build prompt
+        prompt = f"""Ets un assistent expert en gestió d'inventari i codis de barres.
+
+CONTEXT:
+- Treball: {job.video_name}
+- Total deteccions: {len(detections)}
+- Codis detectats: {[d['text'] for d in detection_summary[:10]]}
+
+PREGUNTA DE L'USUARI:
+{request.question}
+
+Proporciona una resposta útil, clara i en català. Si la pregunta és sobre validació, inventari, ubicació o SKUs, dona consells pràctics."""
+
+        # Query AI
+        response = gemini_model.generate_content(prompt)
+        
+        return {
+            "success": True,
+            "response": response.text,
+            "detections_analyzed": len(detections),
+            "ai_provider": "gemini"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ AI analysis error: {e}")
+        return {
+            "success": False,
+            "response": f"Error en l'anàlisi: {str(e)}",
+            "ai_provider": "gemini"
+        }
 
 
 if __name__ == "__main__":

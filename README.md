@@ -1,333 +1,248 @@
-# 📹 Mobile Industrial Scanner
+# 📱 Mobile Scanner - Detecció de Codis de Barres amb IA
 
-A modern, microservices-based SaaS solution for automated text detection in industrial video footage. Upload videos from drones or mobile devices, and let AI extract all visible text and codes automatically.
+Aplicació web per detectar i decodificar codis de barres en vídeos utilitzant YOLOv8 i zxing-cpp.
 
-## 🎯 Key Features
+## 🚀 Característiques
 
-- **Video Upload**: Support for MP4, MOV, AVI, MKV formats
-- **Automatic Frame Extraction**: Intelligent sampling (1 frame per second by default)
-- **AI-Powered OCR**: PaddleOCR for superior text detection in industrial environments
-- **No Filtering**: Captures ALL detected text (filter later in UI)
-- **Real-time Progress**: Track processing status with live updates
-- **Results Dashboard**: Interactive visualization with confidence scores
-- **Export to CSV**: Download results for further analysis
-- **Microservices Architecture**: Scalable, fault-tolerant design
+- ✅ **Detecció automàtica** de codis de barres en vídeos
+- ✅ **Múltiples formats** suportats (EAN-13, QR Code, Code128, etc.)
+- ✅ **Interfície web** intuïtiva amb Streamlit
+- ✅ **Processament en background** amb workers
+- ✅ **Desplegament al núvol** amb Google Cloud Run
+- ✅ **Escalabilitat automàtica** sense gestió de servidors
+- ✅ **HTTPS automàtic** i accessible des de qualsevol lloc
 
-## 🏗️ Architecture
+## 🏗️ Arquitectura
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Frontend   │────▶│   FastAPI   │────▶│    Redis    │
-│ (Streamlit) │     │   Backend   │     │   Queue     │
-└─────────────┘     └─────────────┘     └─────────────┘
-                                               │
-                                               ▼
-                    ┌─────────────┐     ┌─────────────┐
-                    │  PostgreSQL │◀────│   Worker    │
-                    │  Database   │     │ (Processor) │
-                    └─────────────┘     └─────────────┘
+┌─────────────┐      ┌─────────────┐      ┌─────────────┐
+│  Frontend   │─────▶│   Backend   │─────▶│   Worker    │
+│  Streamlit  │      │   FastAPI   │      │   YOLOv8    │
+│  (Port 8501)│      │  (Port 8000)│      │  + zxing    │
+└─────────────┘      └─────────────┘      └─────────────┘
+       │                    │                     │
+       └────────────────────┴─────────────────────┘
+                            │
+                     ┌──────▼──────┐
+                     │  PostgreSQL │
+                     │   + Redis   │
+                     └─────────────┘
 ```
 
-### Services
+## 📦 Components
 
-1. **Frontend (Streamlit)**: User interface for video upload and results visualization
-2. **API (FastAPI)**: RESTful API for file management and job orchestration
-3. **Worker (Python)**: Asynchronous video processor with PaddleOCR
-4. **Redis**: Message broker for job queue
-5. **PostgreSQL**: Persistent storage for results and metadata
+### Frontend (Streamlit)
+- Interfície d'usuari per pujar vídeos
+- Visualització de resultats
+- Gestió de deteccions
 
-## 🚀 Quick Start
+### Backend (FastAPI)
+- API REST per gestionar vídeos
+- Gestió de base de dades
+- Cua de tasques amb Redis
 
-### Prerequisites
+### Worker (Python + YOLOv8 + zxing-cpp)
+- Processament de vídeos
+- Detecció amb YOLOv8
+- Decodificació amb zxing-cpp v2.2.1
 
-- Docker & Docker Compose
-- 4GB+ RAM recommended
-- 10GB+ disk space for videos and frames
+## 🛠️ Tecnologies
 
-### Installation
+- **ML/CV:** YOLOv8, zxing-cpp, OpenCV, Supervision
+- **Backend:** FastAPI, SQLAlchemy, Redis
+- **Frontend:** Streamlit
+- **Base de dades:** PostgreSQL
+- **Deploy:** Google Cloud Run
+- **Build:** Google Cloud Build
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd mobil_scan
-   ```
+## 🚀 Desplegament
 
-2. **Create environment file**
-   ```bash
-   cp .env.example .env
-   ```
+### Requisits
 
-3. **Start all services**
-   ```bash
-   docker-compose up -d
-   ```
+- Google Cloud SDK instal·lat
+- Compte de Google Cloud amb facturació activada
+- Projecte creat: `mobil-scan-app`
 
-4. **Access the application**
-   - Frontend: http://localhost:8501
-   - API Docs: http://localhost:8000/docs
-   - Redis: localhost:6379
-   - PostgreSQL: localhost:5432
+### Passos
 
-### First Use
+1. **Build al núvol:**
+```bash
+gcloud builds submit --config=cloudbuild.yaml --project=mobil-scan-app
+```
 
-1. Open http://localhost:8501 in your browser
-2. Upload a video file (MP4, MOV, AVI, MKV)
-3. Click "🚀 Analyze Inventory"
-4. Wait for processing (auto-refreshes every 5 seconds)
-5. View results in the "Results" tab
-6. Download CSV for further analysis
+2. **Desplegar serveis:**
+```bash
+DESPLEGAR_SERVEIS_ARA.bat
+```
 
-## 📁 Project Structure
+3. **Obtenir URL:**
+```bash
+OBTENIR_URL.bat
+```
+
+## 📱 Ús
+
+1. Obre la URL del frontend al navegador
+2. Puja un vídeo amb codis de barres
+3. Espera el processament (apareixerà a la llista)
+4. Visualitza els resultats amb deteccions i codis
+
+### Des del Mòbil
+
+1. Comparteix la URL al mòbil
+2. Obre-la al navegador
+3. Funciona igual que al PC!
+
+## 🔄 Actualitzar l'Aplicació
+
+Després de fer canvis al codi:
+
+```bash
+ACTUALITZAR_APLICACIO.bat
+```
+
+Això rebuildarà i redesplegarà automàticament (15-20 minuts).
+
+## 🔗 Integració amb Git/GitHub
+
+### Configuració
+
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/TU_USUARIO/mobil-scan-app.git
+git push -u origin main
+```
+
+### Deploy Automàtic
+
+Connecta Cloud Run amb GitHub per deploy automàtic en cada `git push`:
+
+1. Consola Cloud Run → "Connectar al repositori"
+2. Selecciona GitHub i autoritza
+3. Configura branch `main` i `cloudbuild.yaml`
+4. Cada push rebuildarà automàticament!
+
+## 📊 Monitorització
+
+### Veure Logs
+
+```bash
+# Frontend
+gcloud run services logs read mobil-scan-frontend --project mobil-scan-app
+
+# Backend
+gcloud run services logs read mobil-scan-backend --project mobil-scan-app
+
+# Worker
+gcloud run services logs read mobil-scan-worker --project mobil-scan-app
+```
+
+### Consola Web
+
+👉 https://console.cloud.google.com/run?project=mobil-scan-app
+
+## 💰 Costos
+
+- **300$ gratis** per començar (Google Cloud)
+- **~10€/mes** amb tràfic baix
+- **0€** quan no s'usa (escala a 0 automàticament)
+
+## 📚 Documentació
+
+- [Guia Completa de Gestió](GUIA_COMPLETA_GESTIO_PROJECTE.md)
+- [Deploy a Google Cloud Run](DEPLOY_GOOGLE_CLOUD_RUN.md)
+- [Guia Ràpida](GUIA_RAPIDA_GOOGLE_CLOUD.md)
+- [Com Accedir](COM_ACCEDIR_APLICACIO.md)
+
+## 🧹 Neteja del Projecte
+
+Per eliminar fitxers temporals i documentació antiga:
+
+```bash
+NETEJAR_PROJECTE.bat
+```
+
+## 🔧 Desenvolupament Local
+
+### Requisits
+
+- Python 3.10+
+- PostgreSQL
+- Redis
+
+### Instal·lació
+
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+python main.py
+
+# Frontend
+cd frontend
+pip install -r requirements.txt
+streamlit run app.py
+
+# Worker
+cd worker
+pip install -r requirements-worker.txt
+python processor.py
+```
+
+## 📝 Estructura del Projecte
 
 ```
 mobil_scan/
-├── backend/
-│   ├── main.py              # FastAPI application
-│   └── Dockerfile
-├── worker/
-│   ├── processor.py         # Video processing logic
-│   └── Dockerfile
-├── frontend/
-│   ├── app.py              # Streamlit UI
-│   └── Dockerfile
-├── shared/
-│   ├── database.py         # SQLAlchemy models
-│   ├── videos/             # Uploaded videos
-│   ├── frames/             # Extracted frames
-│   └── results/            # Processing results
-├── docker-compose.yml      # Service orchestration
-├── requirements.txt        # Python dependencies
-└── README.md              # This file
+├── backend/              # API FastAPI
+│   ├── main.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── frontend/             # Interfície Streamlit
+│   ├── app.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── worker/               # Processament vídeos
+│   ├── processor.py
+│   ├── Dockerfile
+│   ├── requirements-worker.txt
+│   └── cpp_scanner/      # Test C++ zxing
+│       ├── CMakeLists.txt
+│       └── src/
+│           └── barcode_test.cpp
+├── shared/               # Recursos compartits
+│   ├── database.py
+│   ├── videos/
+│   ├── frames/
+│   └── results/
+├── cloudbuild.yaml       # Build al núvol
+├── .gitignore
+└── README.md
 ```
 
-## 🔧 Configuration
+## 🤝 Contribuir
 
-### Environment Variables
+1. Fork el projecte
+2. Crea una branca (`git checkout -b feature/nova-funcionalitat`)
+3. Commit els canvis (`git commit -m 'Afegir nova funcionalitat'`)
+4. Push a la branca (`git push origin feature/nova-funcionalitat`)
+5. Obre un Pull Request
 
-Edit `.env` file to customize:
+## 📄 Llicència
 
-```bash
-# Frame extraction rate (1 frame every N frames)
-FRAME_INTERVAL=30
+Aquest projecte està sota llicència MIT.
 
-# Database connection
-DATABASE_URL=postgresql://user:pass@db:5432/dbname
+## 👤 Autor
 
-# Redis connection
-REDIS_URL=redis://redis:6379/0
-```
+Ferran Palacín - [ferranpalacin@gmail.com](mailto:ferranpalacin@gmail.com)
 
-### Processing Parameters
+## 🙏 Agraïments
 
-- **Frame Interval**: Default 30 (1 frame per second at 30fps)
-- **OCR Language**: English (can be changed in `worker/processor.py`)
-- **Confidence Threshold**: Adjustable in UI (default 0.5)
-
-## 📊 API Endpoints
-
-### Upload Video
-```bash
-POST /upload
-Content-Type: multipart/form-data
-
-Response:
-{
-  "success": true,
-  "job_id": "uuid",
-  "status": "queued"
-}
-```
-
-### Get Job Status
-```bash
-GET /job/{job_id}
-
-Response:
-{
-  "job_id": "uuid",
-  "status": "completed",
-  "progress": 100.0,
-  "detections_count": 42
-}
-```
-
-### Get Results
-```bash
-GET /results/{job_id}?min_confidence=0.5
-
-Response:
-{
-  "detections": [
-    {
-      "frame_number": 30,
-      "timestamp": 1.0,
-      "detected_text": "ABC123",
-      "confidence": 0.95,
-      "bbox": {"x1": 100, "y1": 200, "x2": 300, "y2": 250}
-    }
-  ]
-}
-```
-
-## 🎨 UI Features
-
-### Upload Tab
-- Drag & drop video upload
-- Video preview
-- File size and format validation
-
-### Results Tab
-- Real-time progress tracking
-- Auto-refresh during processing
-- Interactive data table
-- Confidence filtering
-- CSV export
-- Text analysis charts
-
-### Job History Tab
-- List all processed videos
-- Filter by status
-- Quick access to results
-
-## 🔍 Technical Details
-
-### OCR Engine: PaddleOCR
-
-**Why PaddleOCR over Tesseract?**
-- ✅ Better accuracy in industrial/wild environments
-- ✅ Handles rotated and skewed text
-- ✅ Multi-language support
-- ✅ Faster processing
-- ✅ Better bounding box detection
-
-### Frame Extraction Strategy
-
-- Extract 1 frame every 30 frames (1 fps at 30fps video)
-- Saves frames as JPEG for efficient storage
-- Organized by job_id for easy cleanup
-
-### Database Schema
-
-**video_jobs**
-- job_id, video_name, status, progress
-- total_frames, processed_frames, detections_count
-- timestamps (created, started, completed)
-
-**detections**
-- frame_number, timestamp, detected_text
-- confidence, bounding_box coordinates
-- frame_path for visual reference
-
-## 🐛 Troubleshooting
-
-### Services won't start
-```bash
-# Check logs
-docker-compose logs -f
-
-# Restart services
-docker-compose restart
-
-# Rebuild if needed
-docker-compose up -d --build
-```
-
-### Worker not processing
-```bash
-# Check Redis connection
-docker-compose exec redis redis-cli ping
-
-# Check worker logs
-docker-compose logs -f worker
-```
-
-### Database errors
-```bash
-# Reset database
-docker-compose down -v
-docker-compose up -d
-```
-
-### Low detection accuracy
-- Increase video quality
-- Adjust FRAME_INTERVAL (lower = more frames)
-- Lower confidence threshold in UI
-- Check lighting conditions in video
-
-## 📈 Performance
-
-### Benchmarks (on 4-core CPU, 8GB RAM)
-
-- **Upload**: ~10 MB/s
-- **Frame Extraction**: ~30 fps
-- **OCR Processing**: ~2-3 seconds per frame
-- **Total**: ~5-10 minutes for 1-minute video (30 frames)
-
-### Optimization Tips
-
-1. **Increase FRAME_INTERVAL** for faster processing (less accuracy)
-2. **Use GPU** for PaddleOCR (edit `worker/processor.py`)
-3. **Scale workers** with `docker-compose up -d --scale worker=3`
-4. **Increase RAM** for larger videos
-
-## 🔐 Security Considerations
-
-- [ ] Add authentication (JWT tokens)
-- [ ] Implement rate limiting
-- [ ] Validate file types server-side
-- [ ] Sanitize file names
-- [ ] Add HTTPS in production
-- [ ] Implement user quotas
-
-## 🚀 Production Deployment
-
-### Recommended Changes
-
-1. **Use managed services**
-   - AWS RDS for PostgreSQL
-   - AWS ElastiCache for Redis
-   - AWS S3 for video storage
-
-2. **Add monitoring**
-   - Prometheus + Grafana
-   - Sentry for error tracking
-   - CloudWatch logs
-
-3. **Scale horizontally**
-   - Multiple worker instances
-   - Load balancer for API
-   - CDN for frontend
-
-4. **Security hardening**
-   - Enable HTTPS
-   - Add authentication
-   - Implement CORS properly
-   - Use secrets management
-
-## 📝 License
-
-MIT License - See LICENSE file for details
-
-## 🤝 Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-## 📧 Support
-
-For issues and questions:
-- GitHub Issues: [repository-url]/issues
-- Email: support@example.com
-
-## 🎉 Acknowledgments
-
-- PaddleOCR team for the excellent OCR engine
-- Streamlit for the amazing UI framework
-- FastAPI for the modern API framework
+- [YOLOv8](https://github.com/ultralytics/ultralytics) per la detecció d'objectes
+- [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) per la decodificació de codis
+- [Google Cloud Run](https://cloud.google.com/run) per l'hosting
 
 ---
 
-**Built with ❤️ for industrial automation**
+**Fet amb ❤️ i desplegat al núvol ☁️**

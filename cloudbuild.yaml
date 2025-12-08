@@ -1,0 +1,78 @@
+# Google Cloud Build Configuration
+# Compila les imatges Docker al núvol (sense Docker Desktop)
+
+steps:
+  # Build Backend (FastAPI)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/mobil-scan-backend:latest'
+      - '-f'
+      - 'backend/Dockerfile'
+      - '.'
+    timeout: 1200s
+    id: 'build-backend'
+
+  # Build Frontend (Streamlit)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/mobil-scan-frontend:latest'
+      - '-f'
+      - 'frontend/Dockerfile'
+      - '.'
+    timeout: 1200s
+    id: 'build-frontend'
+
+  # Build Worker (amb zxing-cpp v2.2.0)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/mobil-scan-worker:latest'
+      - '-f'
+      - 'worker/Dockerfile'
+      - '.'
+    timeout: 1800s
+    id: 'build-worker'
+
+  # Push Backend
+  - name: 'gcr.io/cloud-builders/docker'
+    args: 
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/mobil-scan-backend:latest'
+    waitFor: ['build-backend']
+    id: 'push-backend-latest'
+
+  # Push Frontend
+  - name: 'gcr.io/cloud-builders/docker'
+    args: 
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/mobil-scan-frontend:latest'
+    waitFor: ['build-frontend']
+    id: 'push-frontend-latest'
+
+  # Push Worker
+  - name: 'gcr.io/cloud-builders/docker'
+    args: 
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/mobil-scan-worker:latest'
+    waitFor: ['build-worker']
+    id: 'push-worker-latest'
+
+# Imatges que es guardaran al Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/mobil-scan-backend:latest'
+  - 'gcr.io/$PROJECT_ID/mobil-scan-frontend:latest'
+  - 'gcr.io/$PROJECT_ID/mobil-scan-worker:latest'
+
+# Configuració del build
+timeout: 3600s  # 1 hora màxim
+
+options:
+  machineType: 'E2_HIGHCPU_8'  # Màquina potent per compilar ràpid
+  logging: CLOUD_LOGGING_ONLY
+  diskSizeGb: 100
+  substitutionOption: 'ALLOW_LOOSE'

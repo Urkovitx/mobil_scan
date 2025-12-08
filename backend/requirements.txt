@@ -19,3 +19,6 @@ requests==2.31.0
 
 # Logging
 loguru==0.7.2
+
+# AI Integration
+google-generativeai>=0.3.0
