@@ -64,12 +64,9 @@ if HAVE_YOLO:
         
         # Initialize Supervision annotators
         box_annotator = sv.BoxAnnotator(
-            thickness=2,
-            text_thickness=1,
-            text_scale=0.5
+            thickness=2
         )
         label_annotator = sv.LabelAnnotator(
-            text_thickness=1,
             text_scale=0.5,
             text_padding=5
         )
